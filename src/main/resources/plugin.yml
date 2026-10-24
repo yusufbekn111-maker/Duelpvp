@@ -1,0 +1,14 @@
+name: duelpvp
+version: 1.0
+main: duelpvp.DuelPvP
+api-version: "1.20"
+commands:
+  duel:
+    description: "Duelga chaqirish"
+    usage: "/duel <nick> <kit> <raund>"
+  duelset:
+    description: "Duel arena nuqtasini belgilash"
+    usage: "/duelset <1|2>"
+permissions:
+  sokinish.admin:
+    default: op

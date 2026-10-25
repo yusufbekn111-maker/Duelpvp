@@ -9,6 +9,9 @@ commands:
   duelset:
     description: "Duel arena nuqtasini belgilash"
     usage: "/duelset <1|2>"
+  leave:
+    description: "Duelni tark etish"
+    usage: "/leave"
   ps:
     description: "Region belgilash"
     usage: "/ps <1|2|1-2 start>"

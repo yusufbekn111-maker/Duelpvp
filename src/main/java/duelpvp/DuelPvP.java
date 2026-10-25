@@ -69,6 +69,7 @@ public class DuelPvP extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         getServer().getPluginManager().registerEvents(this, this);
+                new Regions(this);
         getLogger().info("DuelPvP yoqildi. Kitlar: " + kitNames());
     }
 

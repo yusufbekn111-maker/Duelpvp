@@ -68,22 +68,6 @@ public class DuelPvP extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        getConfig().addDefault("duel.kits.klassik", List.of(
-                "give {player} diamond_sword",
-                "give {player} golden_apple 3",
-                "item replace entity {player} armor.head with diamond_helmet",
-                "item replace entity {player} armor.chest with diamond_chestplate",
-                "item replace entity {player} armor.legs with diamond_leggings",
-                "item replace entity {player} armor.feet with diamond_boots"));
-        getConfig().addDefault("duel.kits.temir", List.of(
-                "give {player} iron_sword",
-                "give {player} golden_apple 2",
-                "item replace entity {player} armor.head with iron_helmet",
-                "item replace entity {player} armor.chest with iron_chestplate",
-                "item replace entity {player} armor.legs with iron_leggings",
-                "item replace entity {player} armor.feet with iron_boots"));
-        getConfig().options().copyDefaults(true);
-        saveConfig();
         getServer().getPluginManager().registerEvents(this, this);
         getLogger().info("DuelPvP yoqildi. Kitlar: " + kitNames());
     }
@@ -123,19 +107,21 @@ public class DuelPvP extends JavaPlugin implements Listener {
             tell(p, "Ishlatish: /duel <nick> <kit> <raund>  (Kitlar: " + kitNames() + ")",
                     NamedTextColor.YELLOW);
             if (p.hasPermission("sokinish.admin")) {
-                tell(p, "Admin: /duel kit edit <nom> | save | cancel | delete <nom> | list",
+                tell(p, "Admin: /duel create <nom> | edit <nom> | save | cancel | delete <nom> | kits",
                         NamedTextColor.GRAY);
             }
             return true;
         }
-        if (a[0].equalsIgnoreCase("kit")) {
-            kitCmd(p, a);
-        } else if (a[0].equalsIgnoreCase("accept")) {
-            accept(p);
-        } else if (a[0].equalsIgnoreCase("deny")) {
-            deny(p);
-        } else {
-            send(p, a);
+        switch (a[0].toLowerCase()) {
+            case "create" -> editCmd(p, a, true);
+            case "edit" -> editCmd(p, a, false);
+            case "save" -> saveCmd(p);
+            case "cancel" -> cancelCmd(p);
+            case "delete" -> deleteCmd(p, a);
+            case "kits", "list" -> tell(p, "Kitlar: " + kitNames(), NamedTextColor.YELLOW);
+            case "accept" -> accept(p);
+            case "deny" -> deny(p);
+            default -> send(p, a);
         }
         return true;
     }
@@ -172,89 +158,95 @@ public class DuelPvP extends JavaPlugin implements Listener {
         return true;
     }
 
-    // ---------- Kit tahrirlash (admin) ----------
-    private void kitCmd(Player p, String[] a) {
-        if (!p.hasPermission("sokinish.admin")) {
-            tell(p, "Ruxsat yo'q.", NamedTextColor.RED);
-            return;
-        }
+    // ---------- Kit yaratish va tahrirlash (admin) ----------
+    private boolean admin(Player p) {
+        if (p.hasPermission("sokinish.admin")) return true;
+        tell(p, "Ruxsat yo'q.", NamedTextColor.RED);
+        return false;
+    }
+
+    private void editCmd(Player p, String[] a, boolean create) {
+        if (!admin(p)) return;
         if (a.length < 2) {
-            tell(p, "Ishlatish: /duel kit edit <nom> | save | cancel | delete <nom> | list",
+            tell(p, "Ishlatish: /duel " + (create ? "create" : "edit") + " <nom>",
                     NamedTextColor.YELLOW);
             return;
         }
-        String sub = a[1].toLowerCase();
         UUID id = p.getUniqueId();
-        switch (sub) {
-            case "list" -> tell(p, "Kitlar: " + kitNames(), NamedTextColor.YELLOW);
-            case "edit" -> {
-                if (a.length < 3) {
-                    tell(p, "Ishlatish: /duel kit edit <nom>", NamedTextColor.YELLOW);
-                    return;
-                }
-                if (editing.containsKey(id)) {
-                    tell(p, "Avval /duel kit save yoki /duel kit cancel yozing.",
-                            NamedTextColor.RED);
-                    return;
-                }
-                if (inMatch(p)) {
-                    tell(p, "Duel paytida kit tahrirlab bo'lmaydi.", NamedTextColor.RED);
-                    return;
-                }
-                if (!a[2].matches("[A-Za-z0-9_-]+")) {
-                    tell(p, "Nom faqat harf, raqam, _ va - dan iborat bo'lsin.",
-                            NamedTextColor.RED);
-                    return;
-                }
-                String existing = findKit(a[2]);
-                Edit ed = new Edit();
-                ed.name = existing != null ? existing : a[2].toLowerCase();
-                ed.saved = save(p);
-                p.getInventory().clear();
-                giveItemKit(p, ed.name);
-                p.setGameMode(GameMode.CREATIVE);
-                editing.put(id, ed);
-                tell(p, "Tahrirlash rejimi: '" + ed.name + "'. Narsalarni joylab /duel kit save "
-                        + "yozing. Bekor qilish: /duel kit cancel", NamedTextColor.GREEN);
-            }
-            case "save" -> {
-                Edit ed = editing.remove(id);
-                if (ed == null) {
-                    tell(p, "Siz tahrirlash rejimida emassiz.", NamedTextColor.RED);
-                    return;
-                }
-                List<ItemStack> list = Arrays.asList(p.getInventory().getContents());
-                getConfig().set("duel.itemkits." + ed.name + ".items", list);
-                saveConfig();
-                restore(p, ed.saved);
-                tell(p, "Kit '" + ed.name + "' saqlandi.", NamedTextColor.GREEN);
-            }
-            case "cancel" -> {
-                Edit ed = editing.remove(id);
-                if (ed == null) {
-                    tell(p, "Siz tahrirlash rejimida emassiz.", NamedTextColor.RED);
-                    return;
-                }
-                restore(p, ed.saved);
-                tell(p, "Tahrirlash bekor qilindi.", NamedTextColor.YELLOW);
-            }
-            case "delete" -> {
-                if (a.length < 3) {
-                    tell(p, "Ishlatish: /duel kit delete <nom>", NamedTextColor.YELLOW);
-                    return;
-                }
-                String key = findKit(a[2]);
-                if (key == null) {
-                    tell(p, "Bunday kit yo'q.", NamedTextColor.RED);
-                    return;
-                }
-                getConfig().set("duel.itemkits." + key, null);
-                getConfig().set("duel.kits." + key, null);
-                saveConfig();
-                tell(p, "Kit '" + key + "' o'chirildi.", NamedTextColor.YELLOW);
-            }
-            default -> tell(p, "Noma'lum buyruq. /duel kit list", NamedTextColor.RED);
+        if (editing.containsKey(id)) {
+            tell(p, "Avval /duel save yoki /duel cancel yozing.", NamedTextColor.RED);
+            return;
         }
+        if (inMatch(p)) {
+            tell(p, "Duel paytida kit tahrirlab bo'lmaydi.", NamedTextColor.RED);
+            return;
+        }
+        if (!a[1].matches("[A-Za-z0-9_-]+")) {
+            tell(p, "Nom faqat harf, raqam, _ va - dan iborat bo'lsin.", NamedTextColor.RED);
+            return;
+        }
+        String existing = findKit(a[1]);
+        if (create && existing != null) {
+            tell(p, "Bunday kit allaqachon bor. Tahrirlash: /duel edit " + existing,
+                    NamedTextColor.RED);
+            return;
+        }
+        if (!create && existing == null) {
+            tell(p, "Bunday kit yo'q. Yaratish: /duel create " + a[1], NamedTextColor.RED);
+            return;
+        }
+        Edit ed = new Edit();
+        ed.name = create ? a[1].toLowerCase() : existing;
+        ed.saved = save(p);
+        p.getInventory().clear();
+        giveItemKit(p, ed.name);
+        p.setGameMode(GameMode.CREATIVE);
+        editing.put(id, ed);
+        tell(p, "Kit '" + ed.name + "' " + (create ? "yaratilmoqda" : "tahrirlanmoqda")
+                + ". Narsalarni joylab /duel save yozing. Bekor qilish: /duel cancel",
+                NamedTextColor.GREEN);
+    }
+
+    private void saveCmd(Player p) {
+        if (!admin(p)) return;
+        Edit ed = editing.remove(p.getUniqueId());
+        if (ed == null) {
+            tell(p, "Siz kit yaratish yoki tahrirlash rejimida emassiz.", NamedTextColor.RED);
+            return;
+        }
+        List<ItemStack> list = Arrays.asList(p.getInventory().getContents());
+        getConfig().set("duel.itemkits." + ed.name + ".items", list);
+        saveConfig();
+        restore(p, ed.saved);
+        tell(p, "Kit '" + ed.name + "' saqlandi.", NamedTextColor.GREEN);
+    }
+
+    private void cancelCmd(Player p) {
+        if (!admin(p)) return;
+        Edit ed = editing.remove(p.getUniqueId());
+        if (ed == null) {
+            tell(p, "Siz kit yaratish yoki tahrirlash rejimida emassiz.", NamedTextColor.RED);
+            return;
+        }
+        restore(p, ed.saved);
+        tell(p, "Bekor qilindi.", NamedTextColor.YELLOW);
+    }
+
+    private void deleteCmd(Player p, String[] a) {
+        if (!admin(p)) return;
+        if (a.length < 2) {
+            tell(p, "Ishlatish: /duel delete <nom>", NamedTextColor.YELLOW);
+            return;
+        }
+        String key = findKit(a[1]);
+        if (key == null) {
+            tell(p, "Bunday kit yo'q.", NamedTextColor.RED);
+            return;
+        }
+        getConfig().set("duel.itemkits." + key, null);
+        getConfig().set("duel.kits." + key, null);
+        saveConfig();
+        tell(p, "Kit '" + key + "' o'chirildi.", NamedTextColor.YELLOW);
     }
 
     private void tell(Player p, String text, NamedTextColor c) {
@@ -271,7 +263,7 @@ public class DuelPvP extends JavaPlugin implements Listener {
 
     private void send(Player p, String[] a) {
         if (editing.containsKey(p.getUniqueId())) {
-            tell(p, "Avval kit tahrirlashni tugating (/duel kit save yoki cancel).",
+            tell(p, "Avval kit tahrirlashni tugating (/duel save yoki /duel cancel).",
                     NamedTextColor.RED);
             return;
         }
@@ -513,4 +505,4 @@ public class DuelPvP extends JavaPlugin implements Listener {
             finish(current, other);
         }
     }
-        }
+}

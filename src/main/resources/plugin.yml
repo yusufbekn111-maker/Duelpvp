@@ -9,6 +9,9 @@ commands:
   duelset:
     description: "Duel arena nuqtasini belgilash"
     usage: "/duelset <1|2>"
+  ps:
+    description: "Region belgilash"
+    usage: "/ps <1|2|1-2 start>"
 permissions:
   sokinish.admin:
     default: op

@@ -5,6 +5,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -16,11 +17,14 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -69,7 +73,7 @@ public class DuelPvP extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         getServer().getPluginManager().registerEvents(this, this);
-                new Regions(this);
+        new Regions(this);
         getLogger().info("DuelPvP yoqildi. Kitlar: " + kitNames());
     }
 
@@ -88,6 +92,17 @@ public class DuelPvP extends JavaPlugin implements Listener {
     public boolean onCommand(CommandSender s, Command cmd, String label, String[] a) {
         if (!(s instanceof Player p)) {
             s.sendMessage("Bu buyruq faqat o'yinda ishlaydi.");
+            return true;
+        }
+        if (cmd.getName().equalsIgnoreCase("leave")) {
+            if (current == null || !isIn(current, p)) {
+                tell(p, "Siz duelda emassiz.", NamedTextColor.RED);
+                return true;
+            }
+            Match m = current;
+            UUID other = p.getUniqueId().equals(m.a) ? m.b : m.a;
+            m.active = false;
+            finish(m, other);
             return true;
         }
         if (cmd.getName().equalsIgnoreCase("duelset")) {
@@ -437,11 +452,39 @@ public class DuelPvP extends JavaPlugin implements Listener {
         m.round++;
         prepare(pa, getConfig().getLocation("duel.spawn1"), m);
         prepare(pb, getConfig().getLocation("duel.spawn2"), m);
-        m.active = true;
+        m.active = false;
         Component msg = Component.text("Raund " + m.round + "/" + m.rounds
-                + " boshlandi! Kit: " + m.kit, NamedTextColor.GOLD);
+                + ". Kit: " + m.kit, NamedTextColor.GOLD);
         pa.sendMessage(msg);
         pb.sendMessage(msg);
+        countdown(m, 3);
+    }
+
+    private void showTitle(Player p, Component title, Component sub, int stayMs) {
+        p.showTitle(Title.title(title, sub, Title.Times.times(Duration.ofMillis(300),
+                Duration.ofMillis(stayMs), Duration.ofMillis(300))));
+    }
+
+    private void countdown(Match m, int n) {
+        if (current != m) return;
+        Player pa = Bukkit.getPlayer(m.a);
+        Player pb = Bukkit.getPlayer(m.b);
+        if (pa == null || pb == null) return;
+        if (n > 0) {
+            Component t = Component.text(String.valueOf(n), NamedTextColor.RED);
+            Component sub = Component.text("Tayyorlaning", NamedTextColor.GRAY);
+            showTitle(pa, t, sub, 900);
+            showTitle(pb, t, sub, 900);
+            Bukkit.getScheduler().runTaskLater(this, () -> countdown(m, n - 1), 20L);
+            return;
+        }
+        m.active = true;
+        Component t = Component.text(
+                m.round == 1 ? "Duel boshlandi!" : "Raund " + m.round + " boshlandi!",
+                NamedTextColor.GREEN);
+        Component sub = Component.text("Sizga omad!", NamedTextColor.YELLOW);
+        showTitle(pa, t, sub, 1500);
+        showTitle(pb, t, sub, 1500);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -492,18 +535,7 @@ public class DuelPvP extends JavaPlugin implements Listener {
             Saved sv = m.saved.get(id);
             if (pl != null && sv != null) restore(pl, sv);
         }
-        if (current == m) current = null;
-    }
-
-    @EventHandler
-    public void onQuit(PlayerQuitEvent e) {
-        invites.remove(e.getPlayer().getUniqueId());
-        Edit ed = editing.remove(e.getPlayer().getUniqueId());
-        if (ed != null) restore(e.getPlayer(), ed.saved);
-        if (current != null && isIn(current, e.getPlayer())) {
-            UUID other = e.getPlayer().getUniqueId().equals(current.a) ? current.b : current.a;
-            current.active = false;
-            finish(current, other);
-        }
-    }
-}
+        if (winner != null) {
+            for (UUID id : new UUID[]{m.a, m.b}) {
+                Player pl = Bukkit.getPlayer(id);
+                if (pl == null) cont

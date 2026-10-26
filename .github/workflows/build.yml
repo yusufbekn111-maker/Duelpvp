@@ -12,7 +12,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - run: mvn -B package
+      - name: Build
+        run: |
+          set -o pipefail
+          mvn -B package 2>&1 | tee build.log
+      - name: Show errors
+        if: failure()
+        run: |
+          grep "ERROR" build.log | head -10 | while IFS= read -r line; do echo "::error::$line"; done
+          { echo '```'; grep "ERROR" build.log | head -40; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: duelpvp

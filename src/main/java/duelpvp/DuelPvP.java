@@ -538,4 +538,57 @@ public class DuelPvP extends JavaPlugin implements Listener {
         if (winner != null) {
             for (UUID id : new UUID[]{m.a, m.b}) {
                 Player pl = Bukkit.getPlayer(id);
-                if (pl == null) cont
+                                if (pl == null) continue;
+                if (id.equals(winner)) {
+                    showTitle(pl, Component.text("Siz G'alabaga erishdingiz!", NamedTextColor.GOLD),
+                            Component.text("★ KUBOK ★", NamedTextColor.YELLOW), 3000);
+                } else {
+                    showTitle(pl, Component.text("Mag'lubiyat", NamedTextColor.RED),
+                            Component.text("Keyingi safarga omad", NamedTextColor.GRAY), 3000);
+                }
+            }
+        }
+        if (current == m) current = null;
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onDuelCommand(PlayerCommandPreprocessEvent e) {
+        if (current == null || !isIn(current, e.getPlayer())) return;
+        String base = e.getMessage().toLowerCase();
+        if (base.startsWith("/")) base = base.substring(1);
+        int sp = base.indexOf(' ');
+        if (sp >= 0) base = base.substring(0, sp);
+        int col = base.indexOf(':');
+        if (col >= 0) base = base.substring(col + 1);
+        if (base.equals("msg") || base.equals("leave")) return;
+        e.setCancelled(true);
+        tell(e.getPlayer(), "Duel paytida faqat /msg va /leave ishlaydi.", NamedTextColor.RED);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onMove(PlayerMoveEvent e) {
+        Match m = current;
+        if (m == null || m.active || !isIn(m, e.getPlayer())) return;
+        Location f = e.getFrom();
+        Location t = e.getTo();
+        if (t == null) return;
+        if (f.getX() != t.getX() || f.getZ() != t.getZ()) {
+            Location n = f.clone();
+            n.setYaw(t.getYaw());
+            n.setPitch(t.getPitch());
+            e.setTo(n);
+        }
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent e) {
+        invites.remove(e.getPlayer().getUniqueId());
+        Edit ed = editing.remove(e.getPlayer().getUniqueId());
+        if (ed != null) restore(e.getPlayer(), ed.saved);
+        if (current != null && isIn(current, e.getPlayer())) {
+            UUID other = e.getPlayer().getUniqueId().equals(current.a) ? current.b : current.a;
+            current.active = false;
+            finish(current, other);
+        }
+    }
+}
